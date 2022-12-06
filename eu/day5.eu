@@ -1,0 +1,60 @@
+{import: "data=text@../resources/day5.txt"}
+
+# prelude candidate
+nth-or(n, alt, xs): if(n < count(xs), xs nth(n), alt)
+
+# prelude candidate
+replace-at(n, sub, xs): if(n zero?, cons(sub, xs tail-or(nil)), cons(xs head, replace-at(n dec, sub, xs tail)))
+
+`:suppress
+test-data: "    [D]
+[N] [C]
+[Z] [M] [P]
+ 1   2   3
+
+move 1 from 2 to 1
+move 3 from 1 to 3
+move 2 from 2 to 1
+move 1 from 1 to 2" str.split-on("\n")
+
+parse(lines): {
+  split-data: lines split-when(_ str.len zero?)
+
+  stack-rows: split-data first map(str.letters)
+  instruction-lines: split-data second tail
+
+  instructions: instruction-lines map(map(num) ∘ tail ∘ str.match-with("move (\d+) from (\d+) to (\d+)"))
+
+  width: stack-rows map(count) max-of
+  indices: ints-from(0) map(* 4 + 1) take-until(> width)
+  stacks: indices map({ i: • }.(stack-rows map(nth-or(i, null)) remove(= null) filter(str.matches?("[[:alpha:]]"))))
+}
+
+make-apply-instruction(xform): {
+  apply-instruction(stacks, inst): {
+    n: inst !! 0
+    from: (inst !! 1) dec
+    to: (inst !! 2) dec
+
+    x: (stacks !! from) split-at(n)
+    new-from: x second
+    popped: x first
+
+    new-to: append(popped xform, (stacks !! to))
+
+  }.(stacks replace-at(from, new-from) replace-at(to, new-to))
+}.apply-instruction
+
+apply-instruction-9000: make-apply-instruction(reverse)
+apply-instruction-9001: make-apply-instruction(identity)
+
+` :suppress
+config: parse(data)
+
+` :suppress
+test-config: parse(test-data)
+
+run-configuration(c, impl): config.instructions foldl(impl, config.stacks) map(first) str.join-on("")
+
+day5a: run-configuration(config, apply-instruction-9000)
+day5b: run-configuration(config, apply-instruction-9001)

@@ -1,0 +1,17 @@
+{import: "data=text@resources/day1.txt"}
+
+` :suppress
+groups: {
+  accumulate(groups, wip, e): e str.len zero? then([groups ++ [wip], []], [groups, cons(num(e), wip)])
+
+  acc(val, item): { groups: val first wip: val second }.(accumulate(groups, wip, item))
+
+  parse-lines(lines): foldl(acc, [[], []], lines) first
+
+}.(parse-lines(data))
+
+` :suppress
+totals: groups map(foldr(+, 0))
+
+day1a: totals max-of
+day1b: totals qsort(>) take(3) foldr(+, 0)

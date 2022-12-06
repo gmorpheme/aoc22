@@ -1,0 +1,39 @@
+{import: "data=text@../resources/day2.txt"}
+
+move(s): { A: :rock
+           B: :paper
+           C: :scissors
+           X: :rock
+           Y: :paper
+           Z: :scissors} lookup(s)
+
+pri(m): { rock: 0 paper: 1 scissors: 2 } lookup(m)
+result(l, r): [:draw, :win, :lose] nth((3 + pri(l) - pri(r)) % 3)
+move-to-beat(m): [:paper, :scissors, :rock] nth(pri(m))
+move-to-lose-to(m): [:scissors, :rock, :paper] nth(pri(m))
+
+process-line(line): line str.match-with("(\w) (\w)") tail map(sym)
+
+`:suppress
+rounds: data map(process-line)
+
+`:suppress
+rounds-a: rounds map(map(move))
+
+tactic(s): { X: :lose Y: :draw Z: :win } lookup(s)
+
+`:suppress
+rounds-b: rounds map(bimap(move, tactic))
+
+move-score(m): { rock: 1 paper: 2 scissors: 3 } lookup(m)
+
+result-score(elf, me): result(me, elf) lookup-in({lose: 0 draw: 3 win: 6})
+
+score-a(elf, me): move-score(me) + result-score(elf, me)
+
+score-b(elf, plan): {
+  me: plan = :win then(move-to-beat(elf), plan = :lose then(move-to-lose-to(elf), elf))
+}.(move-score(me) + result-score(elf, me))
+
+day2a: rounds-a map(apply(score-a)) foldr(+, 0)
+day2b: rounds-b map(apply(score-b)) foldr(+, 0)

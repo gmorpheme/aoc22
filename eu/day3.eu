@@ -1,0 +1,32 @@
+{import: "data=text@../resources/day3.txt"}
+
+` :suppress
+rucksacks: {
+  halve(line): line split-at(count(line) / 2)
+  compartmentalised: data map(halve ∘ str.letters)
+  grouped: data map(str.letters) partition(3)
+}
+
+# eucalypt 0.2 doesn't have sets yet (briefly dallied with them in
+# 0.1 haskell impl...) so this is going to be UGLY and SLOW...
+
+contains?(item, xs): xs any(= item)
+
+intersection(xs, ys): xs filter({ item: • }.(ys contains?(item)))
+
+find-error(left, right): intersection(left, right) first
+
+# also no way to find integer code point of letter right now, nor do
+# we have mappings that aren't keyed by symbols, so...
+` :suppress
+mapping: {
+  ks: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" str.letters map(sym)
+  dict: zip-kv(ks, ints-from(1))
+}.dict
+
+priority(letter): mapping lookup(sym(letter))
+
+find-dupes(lists): foldl(intersection, lists head, lists tail)
+
+day3a: rucksacks.compartmentalised map(priority ∘ apply(find-error)) foldr(+, 0)
+day3b: rucksacks.grouped map(priority ∘ first ∘ find-dupes) foldr(+, 0)

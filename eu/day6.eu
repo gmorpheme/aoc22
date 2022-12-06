@@ -1,0 +1,42 @@
+{import: "data=text@../resources/day6.txt"}
+
+
+Counter: {
+  `:suppress
+  blank:  [0] cycle take(26) with-keys("abcdefghijklmnopqrstuvwxyz" str.letters map(sym))
+  init(start-group): start-group map(sym) foldl({ c: • sm: • }.(update-value(sm, inc, c)), blank)
+  update(rem, add, c): c update-value(add sym, inc) update-value(rem sym, dec)
+  count-distinct(c): c values filter(> 0) count
+}
+
+update(c, pair): Counter.update(pair first, pair second, c)
+
+find-distinct(n, signal): zip(signal, signal drop(n))
+                          scanl(update, Counter.init(signal take(n)))
+                          map(Counter.count-distinct)
+                          take-while(< n)
+                          count
+                          (+ n)
+
+` :main
+main: {
+  `:suppress
+  real-signal: data first str.letters
+
+  day6a: real-signal find-distinct(4)
+  day6b: real-signal find-distinct(14)
+}
+
+
+# -- TESTS --
+
+
+` { target: :test }
+test: {
+  t(s): s str.letters find-distinct(4)
+  test0: t("mjqjpqmgbljsphdztnvjfqwrcgsmlb") //= 7
+  test1: t("bvwbjplbgvbhsrlpgdmjqwftvncz") //= 5
+  test2: t("nppdvjthqldpwncqszvftbrmjlhg") //= 6
+  test3: t("nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg")  //= 10
+  test4: t("zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw") //= 11
+}

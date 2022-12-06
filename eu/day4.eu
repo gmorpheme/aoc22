@@ -1,0 +1,12 @@
+{import: "data=text@../resources/day4.txt"}
+
+`:suppress
+elf-pairs: {
+  read(line): line str.match-with("(\d+)-(\d+),(\d+)-(\d+)") tail map(num)
+}.(data map(read))
+
+full-containment(al, ar, bl, br): not((al < bl ∧ ar < br) ∨ (al > bl ∧ ar > br))
+overlapping(al, ar, bl, br): not((ar < bl) ∨ (br < al))
+
+day4a: elf-pairs filter(apply(full-containment)) count
+day4b: elf-pairs filter(apply(overlapping)) count
