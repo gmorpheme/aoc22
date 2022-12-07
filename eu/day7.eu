@@ -1,0 +1,89 @@
+{import: "data=text@../resources/day7.txt"}
+
+test-data: "$ cd /
+$ ls
+dir a
+14848514 b.txt
+8504156 c.dat
+dir d
+$ cd a
+$ ls
+dir e
+29116 f
+2557 g
+62596 h.lst
+$ cd e
+$ ls
+584 i
+$ cd ..
+$ cd ..
+$ cd d
+$ ls
+4060174 j
+8033020 d.log
+5626152 d.ext
+7214296 k
+" str.split-on("\n")
+
+# prelude candidate (though should be tailrec)
+butlast(xs):
+  if(xs nil?,
+       [],
+       if(xs tail nil?,
+            [],
+            cons(xs head, butlast(xs tail))))
+
+# with benefit of hindsight (i.e. the clojure solution) we don't
+# actually need to reconstruct the file system, we're only interested
+# in directory sizes which we can tot up directly from the shell lines
+
+`:suppress
+state: { pwd: [] totals: {'/': 0} }
+
+path-keys(pwd): pwd scanl({ a: • e: •}.([a, e] str.join-on("/")), "") tail cons("/") map(sym)
+
+inflate(size, state): {
+  keys: path-keys(state.pwd)
+  increment(totals, k): totals update-value-or(k, + size, size)
+  new-totals: keys foldl(increment, state.totals)
+  new-state: { pwd: state.pwd totals: new-totals }
+}.new-state
+
+cd-to(tgt, state): {
+  pwd: state.pwd ++ [tgt]
+  totals: state.totals
+}
+
+cd-root(state): {
+  pwd: []
+  totals: state.totals
+}
+
+cd-up(state): {
+  pwd: state.pwd butlast
+  totals: state.totals
+}
+
+cd(txt): if(txt = "..", cd-up, if(txt = "/", cd-root, cd-to(txt)))
+
+
+parse-file(text): text str.match-with("^(\d+) .+$") tail-or(nil) map(inflate ∘ num)
+parse-cd(text): text str.match-with("^\$ cd (.+)$") tail-or(nil) map(cd)
+actions(text): parse-file(text) ++ parse-cd(text)
+
+`:suppress
+totals(lines): lines mapcat(actions) foldl({ a: • e: •}.(a e), state) lookup(:totals) values qsort(<)
+
+do-day7a(totals): totals filter(<=100000) foldr(+, 0)
+
+test-day7a: test-data totals do-day7a
+day7a: data totals do-day7a
+
+do-day7b(totals): {
+  used: totals last
+  free: 70000000 - used
+  needed: 30000000 - free
+}.(totals filter(>= needed) min-of)
+
+test-day7b: test-data totals do-day7b
+day7b: data totals do-day7b
