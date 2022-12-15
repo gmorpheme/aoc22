@@ -21,37 +21,102 @@ Sensor at x=20, y=1: closest beacon is at x=15, y=3"))
   (+ (abs (- lx rx))
      (abs (- ly ry))))
 
-(defn parse-sensor []
-  (let [[_ sx sy bx by] (re-matches #"Sensor at x=([\d-]+), y=([\d-]+): closest beacon is at x=([\d-]+), y=([\d-]+)" 
-																		 line)]
+(defn parse-sensor [line]
+  (let [[sx sy bx by]
+        (map parse-long (rest (re-matches #".*at x=([\d-]+), y=([\d-]+):.*at x=([\d-]+), y=([\d-]+)" line)))]
     {:sensor [sx sy]
      :beacon [bx by]
      :reach (distance [sx sy] [bx by])}))
+
+(defn parse-sensors [lines]
+  (map parse-sensor lines))
 
 (defn sensor-bound [{:keys [sensor beacon]}]
   (let [[sx sy] sensor
         [bx by] beacon]
     [(min sx bx) (min sy by) (max sx bx) (max sy by)]))
 
-(defn expand-bound [x0 y0 x1 y1] 
+(defn sensor-relevant [{:keys [sensor reach]} y]
+  (<= (abs (- (second sensor) y)) reach))
+
+(defn expand-bound [[lx0 ly0 lx1 ly1] [rx0 ry0 rx1 ry1]]
+  [(min lx0 rx0) (min ly0 ry0) (max lx1 rx1) (max ly1 ry1)])
 
 (defn bounds [sensors]
+  (reduce expand-bound (map sensor-bound sensors)))
 
- (reduce
-   (fn [[min-x max-x min-y max-y] 
+(defn sensor-y-intersection
+  "The start an end (inclusive) where sensor coverage intersects y"
+  [{:keys [sensor reach]} y]
+  (let [[sx sy] sensor
+        y-dist (abs (- y sy))
+        x-reach (- reach y-dist)
+        start (- sx x-reach)
+        end (+ sx x-reach)]
+    (when (pos? x-reach) [start end])))
 
-(defn do-day15a [lines])
+(defn combine-intersects [[s0 e0] [s1 e1]]
+  (if (and (<= s0 s1) (<= s1 e0))
+    [[s0 (max e0 e1)]]
+    [[s0 e0] [s1 e1]]))
+
+(defn condense-intersects [intersects]
+  (let [intersects (vec (sort intersects))]
+    (reduce
+     (fn [is i] (concat (butlast is) (combine-intersects (last is) i)))
+     [(first intersects)]
+     (rest intersects))))
+
+(defn count-members [[s e]]
+  (inc (- e s)))
+
+(defn beacons-on-y [sensors y]
+  (->> sensors
+       (filter (fn [{:keys [beacon]}] (= y (second beacon))))
+       (map :beacon)
+       (into #{})
+       (count)))
+
+(defn do-day15a [lines y]
+  (let [sensors (parse-sensors lines)
+        relevant-sensors (filter #(sensor-relevant % y) sensors)
+        intersects (remove nil? (map #(sensor-y-intersection % y) relevant-sensors))
+        condensed (condense-intersects intersects)
+        covered (apply + (map count-members condensed))
+        beacons (beacons-on-y sensors y)]
+    (- covered beacons)))
+
+
 
 (defn test-day15a []
-  (do-day15a test-input))
+  (do-day15a test-input 10))
 
 (defn day15a []
-  (do-day15a (lines "day15.txt")))
+  (do-day15a (lines "day15.txt") 2000000))
 
-(defn do-day15b [lines])
+(defn bound-intersects [intersects [min-x max-x]]
+  (map (fn [[s e]] [(max s min-x) (min e max-x)])
+       intersects))
+
+(defn find-beacon [lines [min-x min-y max-x max-y]]
+  (first
+   (remove nil?
+           (for [y (range min-y (inc max-y))]
+             (let [sensors (parse-sensors lines)
+                   relevant-sensors (filter #(sensor-relevant % y) sensors)
+                   intersects (remove nil? (map #(sensor-y-intersection % y) relevant-sensors))
+                   condensed (bound-intersects (condense-intersects intersects) [min-x max-x])
+                   covered (apply + (map count-members condensed))
+                   total (inc (- max-x min-x))]
+               (when (pos? (- total covered))
+                 (let [[[_ l] [h _]] condensed]
+                   [(inc l) y])))))))
+
+(defn frequency [[x y]]
+  (+ (* 4000000 x) y))
 
 (defn test-day15b []
-  (do-day15b test-input))
+  (frequency (find-beacon test-input [0 0 20 20])) )
 
 (defn day15b []
-  (do-day15b (lines "day15.txt")))
+  (frequency (find-beacon (lines "day15.txt") [0 0 4000000 4000000])))
