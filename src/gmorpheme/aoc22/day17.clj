@@ -213,8 +213,6 @@
 
 (defn step
   [{:keys [chamber jet-stream shape-stream]}]
-  (if (zero? (mod (count (:rock-stack chamber)) 100000))
-    (println (depth chamber)))
   (let [chamber (or (jet chamber (if (= (first jet-stream) \<) dec inc)) chamber)
         jet-stream (rest jet-stream)]
     (if-let [fallen (fall chamber)]
@@ -238,69 +236,143 @@
   (let [end-state (drop-rocks (first (lines "day17.txt")) 2022)]
     (dec (depth (:chamber end-state)))))
 
-(defrecord Cycle [start period])
-
-(defrecord CycleDetector [jet-stream-modulus signature-store last-step-check])
-
-(defn make-detector [jet-stream-modulus]
-  (->CycleDetector jet-stream-modulus {} nil)) ; would love a bloom filter
-
-(defn signature [{:keys [chamber jet-stream shape-stream] :as state} step-count jet-stream-modulus]
-  (let [depth (depth chamber)
-        shapes (cons (:falling-shape chamber) (take 10 (:rock-stack chamber)))
-        y-independent (map #(update % :x (- % depth)) shapes)]
-    (hash [shapes (mod step-count jet-stream-modulus)])))
-
-(defn seen-state
-  ;; return vec of new detector state and cycle or nil
-  [{:keys [jet-stream-modulus signature-store last-step-check] :as detector} state step-count]
-  (let [sig (signature state step-count jet-stream-modulus)]
-    (if-let [prev-step-count (get signature-store sig)]
-      (let [potential-cycle (->Cycle prev-step-count (- step-count prev-step-count))]
-        (if (and last-step-check
-                 #_(= (:period last-step-check) (:period potential-cycle))
-                 (= (:start last-step-check) (dec (:start potential-cycle))))
-          ;; cycle confirmed
-          [detector last-step-check]
-          ;; cycle tentative
-          [(assoc detector
-                  :last-step-check potential-cycle
-                  :signature-store (assoc signature-store sig step-count)) nil]))
-      ;; no cycle
-      [(assoc detector
-              :last-step-check nil
-              :signature-store (assoc signature-store sig step-count))
-       nil])))
-
-(defn cycle-checking-step
-  [{:keys [chamber jet-stream shape-stream] :as state} detector step-count]
-  (let [[detector cycle] (seen-state detector state step-count)]
-    [(step state) detector cycle]))
-
-(defn state-after [input step-count]
-  (let [state (initialise (->State (configure-chamber)
-                                   (cycle (seq input))
-                                   (cycle [->Horizontal ->Cross ->Elbow ->Vertical ->Square])))]
-    (->> (iterate step state)
-         (drop step-count)
-         (first))))
-
-(defn run-cycle-checking [input-line target]
+(defn find-depths [input n m]
   (loop [state (initialise (->State (configure-chamber)
-                                    (cycle (seq input-line))
+                                    (cycle (seq input))
                                     (cycle [->Horizontal ->Cross ->Elbow ->Vertical ->Square])))
-         detector (make-detector (count input-line))
-         step-count 0]
-    (let [[new-state new-detector cycle] (cycle-checking-step state detector step-count)]
-      (if cycle
-        cycle
-        (recur new-state new-detector (inc step-count))))))
+         depths []]
+    (let [prev-rocks (count (:rock-stack (:chamber state)))
+          new-state (step state)
+          new-rocks (count (:rock-stack (:chamber new-state)))]
+      (if (>= prev-rocks n)
+        depths
+        (let [new-depth (dec (depth (:chamber new-state)))]
+          (if (and (> new-rocks prev-rocks) (zero? (mod new-rocks m)))
+            (do (println new-depth (- new-depth (or (last depths) 0)))
+                (recur new-state (conj depths new-depth)))
+            (recur new-state depths)))))))
 
 (defn test-day17b []
-  (run-cycle-checking test-input 1000000000000)) ; (for the floor)
+  (let [depths (find-depths test-input 2000000 100000)
+        increments (map (fn [[l r]] (- r l)) (partition 2 depths))]
+    increments)) ; (for the floor)
 
-(defn day17a []
-  )
+;; [151434 302861 454288 605720 757147 908577 1060007 1211434 1362861 1514288]
+
+(defn detect-cycle [increments increment-rocks])
+
+(def test-increments [151427
+                      151432
+                      151430
+                      151427
+                      151427
+                      151427
+                      151430
+                      151427
+                      151432
+                      151430
+                      151427
+                      151427
+                      151427
+                      151430
+                      151427
+                      151432
+                      151430
+                      151427
+                      151427
+                      151427
+                      151430
+                      151427
+                      151432
+                      151430
+                      151427])
+
+(def test-cycle [0 700000])
+
+(defn infer-from-cycle [increments grain [cycle-start cycle-period] target]
+  (let [factor (quot (- target cycle-start) cycle-period)
+        remainder (mod (- target cycle-start) cycle-period)
+        body (drop (quot cycle-start grain) increments)
+        depth-per-cycle (apply + (take (quot cycle-period grain) increments))
+        depth-in-rest (apply + (take (quot (+ cycle-start remainder) grain) increments))]
+    (+ (* factor depth-per-cycle) depth-in-rest)))
+
+(def test-result (infer-from-cycle test-increments 100000 test-cycle 1000000000000))
+
+(defn advance-steps [state step-count]
+  (->> (iterate step state)
+       (drop step-count)
+       (first)))
+
+(defn drop-n-more [state n]
+  (let [rocks (count (:rock-stack (:chamber state)))
+        target (+ rocks n)]
+    (->> (iterate step state)
+         (drop-while #(< (count (:rock-stack (:chamber %))) target))
+         (first))))
+
+(defn find-epoch-increments-up-to-cycle [input]
+  (loop [state (initialise (->State (configure-chamber)
+                                    (cycle (seq input))
+                                    (cycle [->Horizontal ->Cross ->Elbow ->Vertical ->Square])))
+         depths '()
+         increments '()
+         rock-counts '()
+         rock-count-increments '()]
+    (let [epoch (* 5 (count input))
+          new-state (advance-steps state epoch)
+          new-depth (depth (:chamber new-state))
+          new-count (count (:rock-stack (:chamber new-state)))
+          increment (- new-depth (or (first depths) 0))
+          rock-count-increment (- new-count (or (first rock-counts) 0))]
+      (println new-depth increment new-count rock-count-increment)
+      (if (and (> (count depths) 5) (apply = (take 5 increments)))
+        [epoch (vec (reverse (drop 4 increments))) (vec (reverse (drop 4 rock-count-increments)))]
+        (recur new-state
+               (cons new-depth depths)
+               (cons increment increments)
+               (cons new-count rock-counts)
+               (cons rock-count-increment rock-count-increments))))))
+
+(defn do-day17b [input]
+  (let [[epoch-len increments rc-increments] (find-epoch-increments-up-to-cycle input)
+        target 1000000000000
+        prefix-epochs (dec (count increments))
+        depth-prefix (apply + (butlast increments))
+        depth-stable (last increments)
+        rc-prefix (apply + (butlast rc-increments))
+        rc-stable (last rc-increments)
+        required-stable-epochs (quot (- target rc-prefix) rc-stable)
+        extra-rocks-required (rem (- target rc-prefix) rc-stable)]
+
+    (println "After" prefix-epochs "epochs (depth" depth-prefix "rocks" rc-prefix ")")
+    (println "Require" required-stable-epochs "more (each depth" depth-stable "rocks" rc-stable ")")
+    (println "Plus" extra-rocks-required "more rocks...")
+
+    (let [state (initialise (->State (configure-chamber)
+                                     (cycle (seq input))
+                                     (cycle [->Horizontal ->Cross ->Elbow ->Vertical ->Square])))
+          pre-cycle-state (advance-steps state (* prefix-epochs epoch-len))
+          depth-before (depth (:chamber pre-cycle-state))
+          topped-up-state (drop-n-more pre-cycle-state extra-rocks-required)
+          depth-after (depth (:chamber topped-up-state))
+          depth-suffix (- depth-after depth-before)]
+
+      (println extra-rocks-required "more rocks adds" depth-suffix "depth so...")
+      (dec (+ depth-prefix
+              (* required-stable-epochs depth-stable)
+              depth-suffix))
+      ;; subtract the floor
+      )))
+
+(defn test-day17b []
+  (do-day17b test-input))
+
+(defn day17b []
+  (do-day17b (first (lines "day17.txt"))))
+
+;; [153720 307446 461115 614821 768513 922220 1075939 1229616 1383317
+;; 1537005]
 
 (defn render-y [{:keys [floor left-wall right-wall rock-stack falling-shape] :as chamber} y]
   (let [row-box [(:x left-wall) y (inc (:x right-wall)) (inc y)]
